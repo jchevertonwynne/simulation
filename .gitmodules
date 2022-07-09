@@ -1,3 +1,9 @@
 [submodule "zigimg"]
 	path = zigimg
 	url = git@github.com:zigimg/zigimg.git
+[submodule "stb"]
+	path = stb
+	url = git@github.com:nothings/stb.git
+[submodule "qoi"]
+	path = qoi
+	url = git@github.com:phoboslab/qoi.git

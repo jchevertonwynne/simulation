@@ -1,4 +1,5 @@
 const std = @import("std");
+const FileSource = std.build.FileSource;
 
 pub fn build(b: *std.build.Builder) void {
     // Standard target options allows the person running `zig build` to choose
@@ -13,6 +14,8 @@ pub fn build(b: *std.build.Builder) void {
 
     const exe = b.addExecutable("simulation", "src/main.zig");
     exe.addPackagePath("zigimg", "zigimg/zigimg.zig");
+    exe.linkLibC();
+    exe.addCSourceFiles(&.{ "qoi/qoi.h", "stb/stb_image_write.h" }, &.{});
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();
@@ -27,7 +30,6 @@ pub fn build(b: *std.build.Builder) void {
     run_step.dependOn(&run_cmd.step);
 
     const exe_tests = b.addTest("src/main.zig");
-    exe_tests.addPackagePath("zigimg", "zigimg/zigimg.zig");
     exe_tests.setTarget(target);
     exe_tests.setBuildMode(mode);
 
