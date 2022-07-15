@@ -14,10 +14,13 @@ pub fn build(b: *std.build.Builder) void {
 
     const exe = b.addExecutable("simulation", "src/main.zig");
     exe.addPackagePath("zigimg", "zigimg/zigimg.zig");
+
+    exe.addCSourceFile("src/c/qoi.c", &[_][]const u8{"-std=c99"});
+    exe.addCSourceFile("src/c/stb.c", &[_][]const u8{"-std=c99"});
     exe.linkLibC();
-    exe.addCSourceFiles(&.{ "qoi/qoi.h", "stb/stb_image_write.h" }, &.{});
     exe.setTarget(target);
     exe.setBuildMode(mode);
+
     exe.install();
 
     const run_cmd = exe.run();

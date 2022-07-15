@@ -1,5 +1,6 @@
 zig-out
 zig-cache
 zigimg
-out
-out2
+outqoi
+outpng
+out.mp4
