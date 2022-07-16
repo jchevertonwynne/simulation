@@ -1,23 +1,24 @@
 const std = @import("std");
-const Rgba32 = @import("zigimg").color.Rgba32;
 const stb = @import("stbImageWrite.zig");
+const Rgba32 = @import("drawer.zig").Rgba32;
 const Drawer = @import("drawer.zig").Drawer;
 const Model = @import("model.zig").Model;
 const Circle = @import("model.zig").Circle;
+const Line = @import("model.zig").Line;
 
-const WIDTH = 1024;
-const HEIGHT = 1024;
+const WIDTH = 512;
+const HEIGHT = 512;
 const FRAMES = 1024;
-const CIRCLES = 100;
+const CIRCLES = 4;
+const LINES = 4;
 
 pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(!gpa.deinit());
     var alloc = gpa.allocator();
-    var imgBuf = try alloc.alloc(Rgba32, WIDTH * HEIGHT);
-    defer alloc.free(imgBuf);
 
-    var drawer = Drawer.new(imgBuf, WIDTH, HEIGHT);
+    var drawer = try Drawer.new(WIDTH, HEIGHT, alloc);
+    defer drawer.deinit();
 
     var rng = std.rand.DefaultPrng.init(@truncate(u64, @bitCast(u128, std.time.nanoTimestamp())));
 
@@ -31,13 +32,24 @@ pub fn main() anyerror!void {
 
     for (circles) |*c, i| {
         c.* = try Circle.new(WIDTH, HEIGHT, &rng, alloc);
+        while (hasCollision(c.*, circles[0..i])) {
+            c.deinit(alloc);
+            c.* = try Circle.new(WIDTH, HEIGHT, &rng, alloc);
+        }
         computed = i;
     }
 
-    var model = Model.new(&circles, WIDTH, HEIGHT);
+    var lines: [LINES]Line = .{
+        Line.new(.horizontal, 5, WIDTH - 5, 5),
+        Line.new(.horizontal, 5, WIDTH - 5, HEIGHT - 5),
+        Line.new(.vertical, 5, HEIGHT - 5, 5),
+        Line.new(.vertical, 5, HEIGHT - 5, WIDTH - 5),
+    };
 
-    try std.fs.cwd().deleteTree("outpng");
-    try std.fs.cwd().makeDir("outpng");
+    var model = Model.new(&circles, &lines, WIDTH, HEIGHT);
+
+    try std.fs.cwd().deleteTree("out");
+    try std.fs.cwd().makeDir("out");
 
     var out = std.io.getStdOut();
     var w = out.writer();
@@ -48,20 +60,18 @@ pub fn main() anyerror!void {
     while (frame < FRAMES) : (frame += 1) {
         try w.print("\r{0d: >3.1}%", .{@intToFloat(f64, frame + 1) / @intToFloat(f64, FRAMES) * 100.0});
 
-        for (imgBuf) |*p| {
-            p.* = Rgba32.initRgba(0, 0, 0, 255);
-        }
-        model.iterate();
+        drawer.reset();
         model.draw(&drawer);
+        model.iterate();
 
         var nameBuf: [128]u8 = undefined;
-        var fileName = try std.fmt.bufPrintZ(&nameBuf, "outpng/{:0>4}.png", .{frame});
+        var fileName = try std.fmt.bufPrintZ(&nameBuf, "out/{:0>4}.png", .{frame});
         var pngWriteResult = stb.stbi_write_png(
             fileName.ptr,
             WIDTH,
             HEIGHT,
             4,
-            imgBuf.ptr,
+            drawer.ptr(),
             0,
         );
         if (pngWriteResult == 0) {
@@ -69,4 +79,13 @@ pub fn main() anyerror!void {
         }
     }
     try w.print("\n", .{});
+}
+
+fn hasCollision(circle: Circle, circles: []Circle) bool {
+    for (circles) |c| {
+        if (c.hasCollisionCircle(circle)) {
+            return true;
+        }
+    }
+    return false;
 }

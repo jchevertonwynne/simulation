@@ -1,7 +1,6 @@
 const std = @import("std");
 const zigimg = @import("zigimg");
-const Image = zigimg.Image;
-const Rgba32 = zigimg.color.Rgba32;
+const Rgba32 = @import("drawer.zig").Rgba32;
 
 const Drawer = @import("drawer.zig").Drawer;
 
@@ -11,12 +10,14 @@ pub const Model = struct {
     width: usize,
     height: usize,
     circles: []Circle,
+    lines: []Line,
 
-    pub fn new(circles: []Circle, width: usize, height: usize) Self {
+    pub fn new(circles: []Circle, lines: []Line, width: usize, height: usize) Self {
         return .{
             .width = width,
             .height = height,
             .circles = circles,
+            .lines = lines,
         };
     }
 
@@ -26,15 +27,70 @@ pub const Model = struct {
         }
 
         for (self.circles) |*c1, ind1| {
-            for (self.circles[ind1+1..]) |*c2| {
-                Circle.collide(c1, c2);
+            for (self.circles[ind1 + 1 ..]) |*c2| {
+                c1.collideCircle(c2);
+            }
+
+            for (self.lines) |line| {
+                c1.collideLine(line);
             }
         }
     }
 
     pub fn draw(self: Self, drawer: *Drawer) void {
+        for (self.lines) |l| {
+            l.draw(drawer);
+        }
         for (self.circles) |c| {
             c.draw(drawer);
+        }
+        for (self.circles) |c, i| {
+            for (self.circles[0..i]) |c2| {
+                c.drawMidpoint(c2, drawer);
+            }
+        }
+    }
+};
+
+pub const Direction = enum {
+    vertical,
+    horizontal,
+};
+
+pub const Line = struct {
+    const Self = @This();
+
+    const colour = Rgba32.new(255, 0, 0, 255);
+
+    direction: Direction,
+    start: isize,
+    end: isize,
+    at: isize,
+
+    pub fn new(direction: Direction, start: isize, end: isize, at: isize) Self {
+        return .{
+            .direction = direction,
+            .start = start,
+            .end = end,
+            .at = at,
+        };
+    }
+
+    fn draw(self: Self, drawer: *Drawer) void {
+        var p: Point(isize) = switch (self.direction) {
+            .vertical => .{ .x = self.at, .y = self.start },
+            .horizontal => .{ .x = self.start, .y = self.at },
+        };
+        var d: Point(isize) = switch (self.direction) {
+            .vertical => .{ .x = 0, .y = 1 },
+            .horizontal => .{ .x = 1, .y = 0 },
+        };
+        var end: Point(isize) = switch (self.direction) {
+            .vertical => .{ .x = self.at, .y = self.end },
+            .horizontal => .{ .x = self.end, .y = self.at },
+        };
+        while (!p.eql(end)) : (p = p.add(d)) {
+            drawer.place(p.x, p.y, colour);
         }
     }
 };
@@ -43,30 +99,30 @@ pub const Circle = struct {
     const Self = @This();
 
     colour: Rgba32,
-    movement: Point(f64),
+    velocity: Point(f64),
     centre: Point(f64),
-    radius: isize,
+    radius: f64,
     arc: []Point(isize),
 
-    pub fn new(w: usize, h: usize, rng: *std.rand.DefaultPrng, alloc: std.mem.Allocator) !Self {
+    pub fn new(w: isize, h: isize, rng: *std.rand.DefaultPrng, alloc: std.mem.Allocator) !Self {
         var angle = rng.random().float(f64) * 2 * std.math.pi;
-        var radius = @rem(rng.random().int(isize), 5) + 5;
+        var radius = @mod(rng.random().int(isize), 25) + 10;
         return Self{
-            .colour = Rgba32.initRgba(
-                rng.random().int(u8),
-                rng.random().int(u8),
-                rng.random().int(u8),
+            .colour = Rgba32.new(
+                255,
+                255,
+                0,
                 255,
             ),
-            .movement = .{
+            .velocity = .{
                 .x = @sin(angle),
                 .y = @cos(angle),
             },
             .centre = .{
-                .x = rng.random().float(f64) * @intToFloat(f64, w),
-                .y = rng.random().float(f64) * @intToFloat(f64, h),
+                .x = 5 + @intToFloat(f64, radius) + rng.random().float(f64) * @intToFloat(f64, w - (2 * (5 + radius))),
+                .y = 5 + @intToFloat(f64, radius) + rng.random().float(f64) * @intToFloat(f64, h - (2 * (5 + radius))),
             },
-            .radius = radius,
+            .radius = @intToFloat(f64, radius),
             .arc = try calculateArc(radius, alloc),
         };
     }
@@ -75,45 +131,112 @@ pub const Circle = struct {
         alloc.free(self.arc);
     }
 
-    pub fn collide(a: *Self, b: *Self) void {
-        var x = std.math.fabs(a.centre.x - b.centre.x);
-        var y = std.math.fabs(a.centre.y - b.centre.y);
-        if (pow(x, 2) + pow(y, 2) > pow(@intToFloat(f64, a.radius) + @intToFloat(f64, b.radius), 2)) {
+    pub fn hasCollisionCircle(a: Self, b: Self) bool {
+        var distBetweenCirclesSquared = pow(a.centre.x - b.centre.x, 2) + pow(a.centre.y - b.centre.y, 2);
+        var radiiSquared = pow(a.radius + b.radius, 2);
+        return distBetweenCirclesSquared < radiiSquared;
+    }
+
+    pub fn collideCircle(a: *Self, b: *Self) void {
+        if (!a.hasCollisionCircle(b.*)) {
             return;
         }
 
-        // TODO - https://ericleong.me/research/circle-circle/#:~:text=Determining%20whether%20or%20not%20two,squared%20between%20the%20two%20circles.
+        var touchPoint = a.centre.add(b.centre.sub(a.centre).mul(a.radius / (a.radius + b.radius)));
+        a.centre = touchPoint.add(a.centre.sub(touchPoint).normalised().mul(a.radius));
+        b.centre = touchPoint.add(b.centre.sub(touchPoint).normalised().mul(b.radius));
 
-        a.movement = .{ .x = - a.movement.x, .y = - a.movement.y };
-        b.movement = .{ .x = - b.movement.x, .y = - b.movement.y };
+        a.velocity = a.velocity.neg();
+        a.velocity = b.velocity.neg();
+    }
+
+    fn collideLine(self: *Self, line: Line) void {
+        switch (line.direction) {
+            .horizontal => {
+                if (self.centre.y - self.radius < @intToFloat(f64, line.at) and self.centre.y + self.radius > @intToFloat(f64, line.at)) {
+                    if (self.velocity.y > 0) {
+                        self.centre.y = @intToFloat(f64, line.at) - self.radius;
+                    } else {
+                        self.centre.y = @intToFloat(f64, line.at) + self.radius;
+                    }
+                    self.velocity.y = -self.velocity.y;
+                }
+            },
+            .vertical => {
+                if (self.centre.x - self.radius < @intToFloat(f64, line.at) and self.centre.x + self.radius > @intToFloat(f64, line.at)) {
+                    if (self.velocity.x > 0) {
+                        self.centre.x = @intToFloat(f64, line.at) - self.radius;
+                    } else {
+                        self.centre.x = @intToFloat(f64, line.at) + self.radius;
+                    }
+                    self.velocity.x = -self.velocity.x;
+                }
+            },
+        }
     }
 
     fn iterate(self: *Self, width: usize, height: usize) void {
-        self.centre = self.centre.add(self.movement);
+        self.centre = self.centre.add(self.velocity);
         self.centre.x = @mod(self.centre.x, @intToFloat(f64, width));
         self.centre.y = @mod(self.centre.y, @intToFloat(f64, height));
     }
 
+    fn drawMidpoint(a: Self, b: Self, drawer: *Drawer) void {
+        var expectedRadius = a.radius + b.radius;
+        var aProp = a.radius / expectedRadius;
+        var midPoint = a.centre.add(b.centre.sub(a.centre).mul(aProp));
+
+        var i: isize = 0;
+        while (i < 9) : (i += 1) {
+            drawer.place(
+                @floatToInt(isize, midPoint.x) + @rem(i, 3) - 1,
+                @floatToInt(isize, midPoint.y) + @divTrunc(i, 3) - 1,
+                Rgba32.red(),
+            );
+        }
+        midPoint = Point(f64){
+            .x = (a.centre.x + b.centre.x) / 2,
+            .y = (a.centre.y + b.centre.y) / 2,
+        };
+        i = 0;
+        while (i < 9) : (i += 1) {
+            drawer.place(
+                @floatToInt(isize, midPoint.x) + @rem(i, 3) - 1,
+                @floatToInt(isize, midPoint.y) + @divTrunc(i, 3) - 1,
+                Rgba32.blue(),
+            );
+        }
+    }
+
     fn draw(self: Self, drawer: *Drawer) void {
+        var i: isize = 0;
+        while (i < 9) : (i += 1) {
+            drawer.place(
+                @floatToInt(isize, self.centre.x) + @rem(i, 3) - 1,
+                @floatToInt(isize, self.centre.y) + @divTrunc(i, 3) - 1,
+                Rgba32.new(0, 255, 0, 255),
+            );
+        }
+
         for (self.arc) |a| {
             drawer.place(
                 @floatToInt(isize, self.centre.x) + a.x,
                 @floatToInt(isize, self.centre.y) + a.y,
                 self.colour,
             );
-            
+
             drawer.place(
                 @floatToInt(isize, self.centre.x) - a.x,
                 @floatToInt(isize, self.centre.y) + a.y,
                 self.colour,
             );
-            
+
             drawer.place(
                 @floatToInt(isize, self.centre.x) + a.x,
                 @floatToInt(isize, self.centre.y) - a.y,
                 self.colour,
             );
-            
+
             drawer.place(
                 @floatToInt(isize, self.centre.x) - a.x,
                 @floatToInt(isize, self.centre.y) - a.y,
@@ -125,13 +248,48 @@ pub const Circle = struct {
 
 fn Point(comptime T: type) type {
     return struct {
+        const Self = @This();
+
         x: T,
         y: T,
 
-        fn add(a: Point(T), b: Point(T)) Point(T) {
+        fn add(a: Self, b: Self) Self {
             return .{
                 .x = a.x + b.x,
                 .y = a.y + b.y,
+            };
+        }
+
+        fn sub(a: Self, b: Self) Self {
+            return .{
+                .x = a.x - b.x,
+                .y = a.y - b.y,
+            };
+        }
+
+        fn neg(self: Self) Self {
+            return .{
+                .x = -self.x,
+                .y = -self.y,
+            };
+        }
+
+        fn eql(a: Self, b: Self) bool {
+            return std.meta.eql(a, b);
+        }
+
+        fn normalised(self: Self) Self {
+            var total = self.x + self.y;
+            return .{
+                .x = self.x / total,
+                .y = self.y / total,
+            };
+        }
+
+        fn mul(self: Self, mult: T) Self {
+            return .{
+                .x = self.x * mult,
+                .y = self.y * mult,
             };
         }
     };
@@ -161,4 +319,26 @@ fn calculateArc(size: isize, alloc: std.mem.Allocator) ![]Point(isize) {
     }
 
     return result.toOwnedSlice();
+}
+
+test "can find adjusted midpoint of circles" {
+    var a = Circle{
+        .colour = undefined,
+        .velocity = undefined,
+        .centre = .{ .x = 0, .y = 0 },
+        .radius = 2,
+        .arc = undefined,
+    };
+    var b = Circle{
+        .colour = undefined,
+        .velocity = undefined,
+        .centre = .{ .x = 1, .y = 2 },
+        .radius = 2,
+        .arc = undefined,
+    };
+    var expectedRadius = a.radius + b.radius;
+    var aProp = a.radius / expectedRadius;
+    var midPoint = a.centre.add(b.centre.sub(a.centre).mul(aProp));
+
+    try std.testing.expectEqual(Point(f64){ .x = 0.5, .y = 1 }, midPoint);
 }
