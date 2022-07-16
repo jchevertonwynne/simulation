@@ -1,6 +1,5 @@
 const std = @import("std");
 const Rgba32 = @import("zigimg").color.Rgba32;
-const qoi = @import("qoi.zig");
 const stb = @import("stbImageWrite.zig");
 const Drawer = @import("drawer.zig").Drawer;
 const Model = @import("model.zig").Model;
@@ -8,7 +7,8 @@ const Circle = @import("model.zig").Circle;
 
 const WIDTH = 1024;
 const HEIGHT = 1024;
-const FRAMES = 1;
+const FRAMES = 1024;
+const CIRCLES = 1024;
 
 pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -21,7 +21,7 @@ pub fn main() anyerror!void {
 
     var rng = std.rand.DefaultPrng.init(@truncate(u64, @bitCast(u128, std.time.nanoTimestamp())));
 
-    var circles: [1024]Circle = undefined;
+    var circles: [CIRCLES]Circle = undefined;
     for (circles) |*c| {
         c.* = Circle.new(WIDTH, HEIGHT, &rng);
     }
@@ -44,24 +44,16 @@ pub fn main() anyerror!void {
         model.iterate();
         model.draw(&drawer);
 
-        var qoi_desc: qoi.qoi_desc = .{
-            .width = WIDTH,
-            .height = HEIGHT,
-            .channels = 4,
-            .colorspace = 0,
-        };
-        var outLen: c_int = undefined;
-        var qoiFile = qoi.qoi_encode(imgBuf.ptr, &qoi_desc, &outLen) orelse return error.FailedToReadQoiFile;
-        defer qoi.qoi_free(qoiFile);
-
-        try std.fs.cwd().writeFile("out.qoi", @ptrCast([*]u8, @alignCast(@alignOf(u8), qoiFile))[0..@intCast(usize, outLen)]);
-
         var nameBuf: [128]u8 = undefined;
         var fileName = try std.fmt.bufPrintZ(&nameBuf, "outpng/{:0>4}.png", .{frame});
-        var width = @bitCast(c_int, qoi_desc.width);
-        var height = @bitCast(c_int, qoi_desc.height);
-        var channels = qoi_desc.channels;
-        var pngWriteResult = stb.stbi_write_png(fileName.ptr, width, height, channels, qoiFile, 0);
+        var pngWriteResult = stb.stbi_write_png(
+            fileName.ptr,
+            WIDTH,
+            HEIGHT,
+            4,
+            imgBuf.ptr,
+            0,
+        );
         if (pngWriteResult == 0) {
             return error.FailedtoConvertQoi;
         }

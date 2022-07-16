@@ -1,9 +1,6 @@
 [submodule "src/c/stb"]
 	path = src/c/stb
 	url = git@github.com:nothings/stb.git
-[submodule "src/c/qoi"]
-	path = src/c/qoi
-	url = https://github.com/phoboslab/qoi
 [submodule "zigimg"]
 	path = zigimg
 	url = git@github.com:zigimg/zigimg.git

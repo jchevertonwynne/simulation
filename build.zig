@@ -15,7 +15,6 @@ pub fn build(b: *std.build.Builder) void {
     const exe = b.addExecutable("simulation", "src/main.zig");
     exe.addPackagePath("zigimg", "zigimg/zigimg.zig");
 
-    exe.addCSourceFile("src/c/qoi.c", &[_][]const u8{"-std=c99"});
     exe.addCSourceFile("src/c/stb.c", &[_][]const u8{"-std=c99"});
     exe.linkLibC();
     exe.setTarget(target);
