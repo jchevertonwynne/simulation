@@ -8,7 +8,7 @@ const Circle = @import("model.zig").Circle;
 const WIDTH = 1024;
 const HEIGHT = 1024;
 const FRAMES = 1024;
-const CIRCLES = 1024;
+const CIRCLES = 100;
 
 pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -22,8 +22,16 @@ pub fn main() anyerror!void {
     var rng = std.rand.DefaultPrng.init(@truncate(u64, @bitCast(u128, std.time.nanoTimestamp())));
 
     var circles: [CIRCLES]Circle = undefined;
-    for (circles) |*c| {
-        c.* = Circle.new(WIDTH, HEIGHT, &rng);
+    var computed: usize = 0;
+    errdefer {
+        for (circles[0..computed]) |*c| {
+            c.deinit(alloc);
+        }
+    }
+
+    for (circles) |*c, i| {
+        c.* = try Circle.new(WIDTH, HEIGHT, &rng, alloc);
+        computed = i;
     }
 
     var model = Model.new(&circles, WIDTH, HEIGHT);
@@ -33,6 +41,8 @@ pub fn main() anyerror!void {
 
     var out = std.io.getStdOut();
     var w = out.writer();
+
+    try w.print("rendering {} frames...\n", .{FRAMES});
 
     var frame: u24 = 0;
     while (frame < FRAMES) : (frame += 1) {
