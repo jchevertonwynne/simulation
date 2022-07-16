@@ -61,7 +61,7 @@ pub const qoi_desc = extern struct {
 pub extern fn qoi_free(p: *anyopaque) void;
 pub extern fn qoi_write(filename: [*c]const u8, data: ?*const anyopaque, desc: [*c]const qoi_desc) c_int;
 pub extern fn qoi_read(filename: [*c]const u8, desc: *qoi_desc, channels: c_int) ?*anyopaque;
-pub extern fn qoi_encode(data: ?*const anyopaque, desc: [*c]const qoi_desc, out_len: [*c]c_int) ?*anyopaque;
+pub extern fn qoi_encode(data: ?*const anyopaque, desc: *const qoi_desc, out_len: *c_int) ?*anyopaque;
 pub extern fn qoi_decode(data: ?*const anyopaque, size: c_int, desc: [*c]qoi_desc, channels: c_int) ?*anyopaque;
 pub const __block = @compileError("unable to translate macro: undefined identifier `__attribute__`"); // (no file):27:9
 pub const __INTMAX_C_SUFFIX__ = @compileError("unable to translate macro: undefined identifier `L`"); // (no file):68:9

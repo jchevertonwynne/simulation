@@ -3,5 +3,5 @@
 #include <stdlib.h>
 
 void qoi_free(void* p) {
-    free(p);
+    QOI_FREE(p);
 }
