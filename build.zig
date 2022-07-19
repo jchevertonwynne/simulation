@@ -13,6 +13,7 @@ pub fn build(b: *std.build.Builder) void {
     const mode = b.standardReleaseOptions();
 
     const exe = b.addExecutable("simulation", "src/main.zig");
+    exe.addPackagePath("zigargs", "zig-args/args.zig");
     exe.addCSourceFile("src/c/stb.c", &[_][]const u8{"-std=c99"});
     exe.linkLibC();
     exe.setTarget(target);

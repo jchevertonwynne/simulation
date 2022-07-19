@@ -7,12 +7,12 @@ const Drawer = @import("drawer.zig").Drawer;
 pub const Model = struct {
     const Self = @This();
 
-    width: usize,
-    height: usize,
+    width: isize,
+    height: isize,
     circles: []Circle,
     lines: []Line,
 
-    pub fn new(circles: []Circle, lines: []Line, width: usize, height: usize) Self {
+    pub fn new(circles: []Circle, lines: []Line, width: isize, height: isize) Self {
         return .{
             .width = width,
             .height = height,
@@ -142,9 +142,9 @@ pub const Circle = struct {
             return;
         }
 
-        var touchPoint = a.centre.add(b.centre.sub(a.centre).mul(a.radius / (a.radius + b.radius)));
-        a.centre = touchPoint.add(a.centre.sub(touchPoint).normalised().mul(a.radius));
-        b.centre = touchPoint.add(b.centre.sub(touchPoint).normalised().mul(b.radius));
+        var midPoint = a.adjustedMidpoint(b.*);
+        a.centre = midPoint.add(a.centre.sub(midPoint).normalised().mul(a.radius));
+        b.centre = midPoint.add(b.centre.sub(midPoint).normalised().mul(b.radius));
 
         a.velocity = a.velocity.neg();
         a.velocity = b.velocity.neg();
@@ -175,71 +175,69 @@ pub const Circle = struct {
         }
     }
 
-    fn iterate(self: *Self, width: usize, height: usize) void {
+    fn iterate(self: *Self, width: isize, height: isize) void {
         self.centre = self.centre.add(self.velocity);
         self.centre.x = @mod(self.centre.x, @intToFloat(f64, width));
         self.centre.y = @mod(self.centre.y, @intToFloat(f64, height));
     }
 
-    fn drawMidpoint(a: Self, b: Self, drawer: *Drawer) void {
+    fn adjustedMidpoint(a: Self, b: Self) Point(f64) {
         var expectedRadius = a.radius + b.radius;
         var aProp = a.radius / expectedRadius;
-        var midPoint = a.centre.add(b.centre.sub(a.centre).mul(aProp));
+        var ab = b.centre.sub(a.centre);
+        var abWeighted = ab.mul(aProp);
+        var result = a.centre.add(abWeighted);
+        return result;
+    }
+
+    fn drawMidpoint(a: Self, b: Self, drawer: *Drawer) void {
+        var midPoint = a.adjustedMidpoint(b);
 
         var i: isize = 0;
-        while (i < 9) : (i += 1) {
+        while (i < 9) : (i += 2) {
             drawer.place(
                 @floatToInt(isize, midPoint.x) + @rem(i, 3) - 1,
                 @floatToInt(isize, midPoint.y) + @divTrunc(i, 3) - 1,
                 Rgba32.red(),
             );
         }
-        midPoint = Point(f64){
-            .x = (a.centre.x + b.centre.x) / 2,
-            .y = (a.centre.y + b.centre.y) / 2,
-        };
-        i = 0;
-        while (i < 9) : (i += 1) {
-            drawer.place(
-                @floatToInt(isize, midPoint.x) + @rem(i, 3) - 1,
-                @floatToInt(isize, midPoint.y) + @divTrunc(i, 3) - 1,
-                Rgba32.blue(),
-            );
-        }
     }
 
     fn draw(self: Self, drawer: *Drawer) void {
+        var x = @floatToInt(isize, self.centre.x);
+        var y = @floatToInt(isize, self.centre.y);
+
         var i: isize = 0;
         while (i < 9) : (i += 1) {
             drawer.place(
-                @floatToInt(isize, self.centre.x) + @rem(i, 3) - 1,
-                @floatToInt(isize, self.centre.y) + @divTrunc(i, 3) - 1,
+                x + @rem(i, 3) - 1,
+                y + @divTrunc(i, 3) - 1,
                 Rgba32.new(0, 255, 0, 255),
             );
         }
 
         for (self.arc) |a| {
             drawer.place(
-                @floatToInt(isize, self.centre.x) + a.x,
-                @floatToInt(isize, self.centre.y) + a.y,
+                x + a.x,
+                y + a.y,
                 self.colour,
             );
 
             drawer.place(
-                @floatToInt(isize, self.centre.x) - a.x,
-                @floatToInt(isize, self.centre.y) + a.y,
+                x - a.x,
+                y + a.y,
                 self.colour,
             );
 
             drawer.place(
-                @floatToInt(isize, self.centre.x) + a.x,
-                @floatToInt(isize, self.centre.y) - a.y,
+                x + a.x,
+                y - a.y,
                 self.colour,
             );
 
             drawer.place(
-                @floatToInt(isize, self.centre.x) - a.x,
-                @floatToInt(isize, self.centre.y) - a.y,
+                x - a.x,
+                y - a.y,
                 self.colour,
             );
         }
@@ -279,7 +277,7 @@ fn Point(comptime T: type) type {
         }
 
         fn normalised(self: Self) Self {
-            var total = self.x + self.y;
+            var total = std.math.fabs(self.x) + std.math.fabs(self.y);
             return .{
                 .x = self.x / total,
                 .y = self.y / total,
@@ -326,19 +324,38 @@ test "can find adjusted midpoint of circles" {
         .colour = undefined,
         .velocity = undefined,
         .centre = .{ .x = 0, .y = 0 },
-        .radius = 2,
+        .radius = 1,
         .arc = undefined,
     };
     var b = Circle{
         .colour = undefined,
         .velocity = undefined,
-        .centre = .{ .x = 1, .y = 2 },
-        .radius = 2,
+        .centre = .{ .x = 4, .y = 4 },
+        .radius = 3,
         .arc = undefined,
     };
-    var expectedRadius = a.radius + b.radius;
-    var aProp = a.radius / expectedRadius;
-    var midPoint = a.centre.add(b.centre.sub(a.centre).mul(aProp));
 
-    try std.testing.expectEqual(Point(f64){ .x = 0.5, .y = 1 }, midPoint);
+    try std.testing.expectEqual(Point(f64){ .x = 1, .y = 1 }, a.adjustedMidpoint(b));
+}
+
+test "collisions move circles the correct amounts" {
+    var a = Circle{
+        .colour = undefined,
+        .velocity = undefined,
+        .centre = .{ .x = 1, .y = 0 },
+        .radius = 5,
+        .arc = undefined,
+    };
+    var b = Circle{
+        .colour = undefined,
+        .velocity = undefined,
+        .centre = .{ .x = 9, .y = 0 },
+        .radius = 5,
+        .arc = undefined,
+    };
+
+    try std.testing.expectEqual(Point(f64){ .x = 5, .y = 0 }, a.adjustedMidpoint(b));
+    Circle.collideCircle(&a, &b);
+    try std.testing.expectEqual(Point(f64){ .x = 0, .y = 0 }, a.centre);
+    try std.testing.expectEqual(Point(f64){ .x = 10, .y = 0 }, b.centre);
 }

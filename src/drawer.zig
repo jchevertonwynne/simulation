@@ -26,18 +26,20 @@ pub const Drawer = struct {
     const Self = @This();
 
     img: []u8,
-    width: usize,
-    height: usize,
+    width: isize,
+    height: isize,
     alloc: std.mem.Allocator,
 
-    pub fn new(width: usize, height: usize, alloc: std.mem.Allocator) !Self {
-        var img = try alloc.alloc(u8, width * height * 4);
-        return Self{
+    pub fn new(width: isize, height: isize, alloc: std.mem.Allocator) !Self {
+        var img = try alloc.alloc(u8, @intCast(usize, width * height * 4));
+        var result = Self{
             .img = img,
             .width = width,
             .height = height,
             .alloc = alloc,
         };
+        result.reset();
+        return result;
     }
 
     pub fn deinit(self: *Self) void {
@@ -63,6 +65,6 @@ pub const Drawer = struct {
             return;
         }
 
-        std.mem.copy(u8, self.img[(@bitCast(usize, x) + @bitCast(usize, y) * self.width) * 4 ..], &pixel.inner);
+        std.mem.copy(u8, self.img[@intCast(usize, (x + y * self.width) * 4)..], &pixel.inner);
     }
 };
