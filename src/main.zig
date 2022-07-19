@@ -20,7 +20,7 @@ pub fn main() anyerror!void {
     var out = std.io.getStdOut();
     var w = out.writer();
 
-    const args = try Args.parse(alloc, w);
+    const args = try Args.parse(alloc);
     defer args.deinit();
 
     var circles = try initCircles(args.options, alloc);
@@ -69,23 +69,20 @@ const Args = struct {
         .c = "circles",
     };
 
-    fn parse(alloc: std.mem.Allocator, w: anytype) !zigargs.ParseArgsResult(Self, null) {
+    fn parse(alloc: std.mem.Allocator) !zigargs.ParseArgsResult(Self, null) {
         const args = try zigargs.parseForCurrentProcess(Args, alloc, .print);
         errdefer args.deinit();
 
         if (args.options.write_threads > MAX_WRITE_THREADS) {
-            try w.print("maxmimum {} write threads allowed, {} is too many\n", .{ MAX_WRITE_THREADS, args.options.write_threads });
-            std.process.exit(128);
+            return error.OverMaxWriteThreads;
         }
 
         if (args.options.width < 128) {
-            try w.print("width must be at least {}, {} is too small\n", .{ MIN_WIDTH, args.options.width });
-            std.process.exit(128);
+            return error.BelowMinWidth;
         }
 
         if (args.options.height < 128) {
-            try w.print("width must be at least {}, {} is too small\n", .{ MIN_HEIGHT, args.options.height });
-            std.process.exit(128);
+            return error.BelowMinHeight;
         }
 
         return args;
