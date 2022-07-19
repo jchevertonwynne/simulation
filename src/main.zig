@@ -8,6 +8,8 @@ const Circle = @import("model.zig").Circle;
 const Line = @import("model.zig").Line;
 
 const MAX_WRITE_THREADS = 20;
+const MIN_WIDTH = 128;
+const MIN_HEIGHT = 128;
 const LINES = 0;
 
 pub fn main() anyerror!void {
@@ -73,6 +75,16 @@ const Args = struct {
 
         if (args.options.write_threads > MAX_WRITE_THREADS) {
             try w.print("maxmimum {} write threads allowed, {} is too many\n", .{ MAX_WRITE_THREADS, args.options.write_threads });
+            std.process.exit(128);
+        }
+
+        if (args.options.width < 128) {
+            try w.print("width must be at least {}, {} is too small\n", .{ MIN_WIDTH, args.options.width });
+            std.process.exit(128);
+        }
+
+        if (args.options.height < 128) {
+            try w.print("width must be at least {}, {} is too small\n", .{ MIN_HEIGHT, args.options.height });
             std.process.exit(128);
         }
 
