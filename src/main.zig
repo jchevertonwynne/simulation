@@ -1,6 +1,8 @@
 const std = @import("std");
-const stb = @import("stbImageWrite.zig");
+
 const zigargs = @import("zigargs");
+
+const stb = @import("stbImageWrite.zig");
 const Rgba32 = @import("drawer.zig").Rgba32;
 const Drawer = @import("drawer.zig").Drawer;
 const Model = @import("model.zig").Model;
